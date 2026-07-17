@@ -12,6 +12,7 @@ object ChunkPerfClientState {
     @Volatile var pendingTarget: PendingTarget? = null
     @Volatile var selectedIntervalTicks: Int = 100
     @Volatile var selectedClusterRadiusChunks: Int = 2
+    @Volatile var selectedServerClusterRadiusChunks: Int = 2
     @Volatile var showOnlyOwnedChunks: Boolean = false
     @Volatile var showPercentage: Boolean = false
 }
@@ -24,6 +25,9 @@ class ChunkPerfClient : ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.OPEN_BE_SCREEN) { client, _, _, _ ->
             client.execute { client.setScreen(BlockEntityPerfScreen()) }
         }
+        ClientPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.OPEN_SERVER_SCREEN) { client, _, _, _ ->
+            client.execute { client.setScreen(ServerPerfScreen()) }
+        }
         ClientPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.SNAPSHOT) { client, _, buf, _ ->
             val blockEntityHotspotsEnabled = buf.readBoolean()
             val count = buf.readVarInt()
@@ -33,6 +37,9 @@ class ChunkPerfClient : ClientModInitializer {
                 val chunkX = buf.readInt()
                 val chunkZ = buf.readInt()
                 val ownedByViewer = buf.readBoolean()
+                val hasOwner = buf.readBoolean()
+                val ownerTeamId = if (hasOwner) buf.readUuid() else null
+                val ownerTeamName = if (hasOwner) buf.readString() else null
                 val randomTickNs = buf.readLong()
                 val blockEntityNs = buf.readLong()
                 val entityTickNs = buf.readLong()
@@ -50,7 +57,7 @@ class ChunkPerfClient : ClientModInitializer {
                     hotspots += ClientBlockEntitySample(pos, name, blockId, ns)
                 }
                 values += ClientChunkSample(
-                    dimension, chunkX, chunkZ, ownedByViewer, randomTickNs, blockEntityNs,
+                    dimension, chunkX, chunkZ, ownedByViewer, ownerTeamId, ownerTeamName, randomTickNs, blockEntityNs,
                     entityTickNs, mobSpawnNs, blockEntityTickCount, entityTickCount,
                     intervalTicks, java.util.List.copyOf(hotspots)
                 )

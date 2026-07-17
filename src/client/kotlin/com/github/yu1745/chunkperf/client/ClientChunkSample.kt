@@ -1,12 +1,15 @@
 package com.github.yu1745.chunkperf.client
 
 import net.minecraft.util.Identifier
+import java.util.UUID
 
 data class ClientChunkSample(
     val dimension: Identifier,
     val chunkX: Int,
     val chunkZ: Int,
     val ownedByViewer: Boolean,
+    val ownerTeamId: UUID?,
+    val ownerTeamName: String?,
     val randomTickNs: Long,
     val blockEntityNs: Long,
     val entityTickNs: Long,

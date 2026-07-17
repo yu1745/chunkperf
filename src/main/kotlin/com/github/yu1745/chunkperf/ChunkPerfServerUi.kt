@@ -39,6 +39,15 @@ object ChunkPerfServerUi {
                         Command.SINGLE_SUCCESS
                     }
             )
+            dispatcher.register(
+                net.minecraft.server.command.CommandManager.literal("perfserver")
+                    .requires { it.entity is ServerPlayerEntity && it.hasPermissionLevel(2) }
+                    .executes { context ->
+                        val player = context.source.player!!
+                        ChunkPerfNetworking.sendOpenServer(player)
+                        Command.SINGLE_SUCCESS
+                    }
+            )
         }
         ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.SUBSCRIBE) { server, player, _, _, _ ->
             server.execute {

@@ -15,6 +15,7 @@ import net.minecraft.util.Identifier
 object ChunkPerfNetworking {
     val OPEN_SCREEN = Identifier("chunkperf", "open_screen")
     val OPEN_BE_SCREEN = Identifier("chunkperf", "open_be_screen")
+    val OPEN_SERVER_SCREEN = Identifier("chunkperf", "open_server_screen")
     val SNAPSHOT = Identifier("chunkperf", "snapshot")
     val SUBSCRIBE = Identifier("chunkperf", "subscribe")
     val UNSUBSCRIBE = Identifier("chunkperf", "unsubscribe")
@@ -31,6 +32,10 @@ object ChunkPerfNetworking {
         ServerPlayNetworking.send(player, OPEN_BE_SCREEN, PacketByteBufs.empty())
     }
 
+    fun sendOpenServer(player: ServerPlayerEntity) {
+        ServerPlayNetworking.send(player, OPEN_SERVER_SCREEN, PacketByteBufs.empty())
+    }
+
     fun sendSnapshot(player: ServerPlayerEntity, snapshots: List<ChunkSampleSnapshot>, includeBlockEntities: Boolean = false) {
         val buf = PacketByteBufs.create()
         buf.writeBoolean(ChunkPerfRuntime.detailedBlockEntitySampling)
@@ -45,6 +50,12 @@ object ChunkPerfNetworking {
         buf.writeInt(value.chunkX)
         buf.writeInt(value.chunkZ)
         buf.writeBoolean(viewerTeamId != null && value.claim is ClaimSnapshot.Claimed && value.claim.teamId == viewerTeamId)
+        val claimed = value.claim as? ClaimSnapshot.Claimed
+        buf.writeBoolean(claimed != null)
+        if (claimed != null) {
+            buf.writeUuid(claimed.teamId)
+            buf.writeString(claimed.teamName)
+        }
         buf.writeLong(value.randomTickNs)
         buf.writeLong(value.blockEntityNs)
         buf.writeLong(value.entityTickNs)
