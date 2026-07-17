@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.github.yu1745.chunkperf.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "ServerChunkManagerMixin",
+    "WorldBlockEntityTickMixin",
+    "EntityTickMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

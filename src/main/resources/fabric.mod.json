@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "chunkperf",
+  "version": "${version}",
+  "name": "ChunkPerf",
+  "description": "Server-side per-chunk tick performance sampler.",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      {
+        "adapter": "kotlin",
+        "value": "com.github.yu1745.chunkperf.ChunkPerfMod"
+      }
+    ],
+    "client": [
+      {
+        "adapter": "kotlin",
+        "value": "com.github.yu1745.chunkperf.client.ChunkPerfClient"
+      }
+    ],
+    "chunkperf:claim_provider": [
+      {
+        "adapter": "kotlin",
+        "value": "com.github.yu1745.chunkperf.integration.ftbchunks.FTBChunksClaimProvider"
+      }
+    ]
+  },
+  "mixins": ["chunkperf.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "fabric-api": "*",
+    "fabric-language-kotlin": "*",
+    "minecraft": "~1.20.1",
+    "java": ">=17"
+  },
+  "recommends": {
+    "ftbchunks": "*"
+  }
+}
