@@ -16,7 +16,6 @@ import net.minecraft.server.MinecraftServer
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.Collections
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -28,7 +27,7 @@ object ChunkPerfRuntime {
     private val blockEntityHotspotsEnabled = AtomicBoolean(false)
     var currentTick: Long = 0L
     var lastSnapshotTick: Long = 0L
-    @Volatile var snapshotIntervalTicks: Int = 100
+    @Volatile var snapshotIntervalTicks: Int = 20
 
     val enabled: Boolean get() = samplingEnabled.get()
     val detailedBlockEntitySampling: Boolean get() = blockEntityHotspotsEnabled.get()
@@ -64,7 +63,6 @@ class ChunkPerfMod : ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPED.register(::onServerStopped)
         ServerTickEvents.START_SERVER_TICK.register(::onStartServerTick)
         ServerTickEvents.END_SERVER_TICK.register(::onEndServerTick)
-        ChunkPerfRuntime.logger.info("ChunkPerf initialized; temporary snapshot logging is enabled")
     }
 
     private fun installClaimProvider() {
@@ -143,44 +141,13 @@ class ChunkPerfMod : ModInitializer {
                 )
             }
             val snapshots = Collections.unmodifiableList(builder)
-            ChunkPerfRuntime.latestSnapshot.set(snapshots)
-            ChunkPerfRuntime.lastSnapshotTick = tick
-            logSnapshots(snapshots)
-            ChunkPerfServerUi.publish(server)
+        ChunkPerfRuntime.latestSnapshot.set(snapshots)
+           ChunkPerfRuntime.lastSnapshotTick = tick
+           ChunkPerfServerUi.publish(server)
         }
         if (tick % 1_000L == 0L) {
             TickSampleCollector.pruneStale(tick, ChunkPerfRuntime.config.pruneStaleAfterTicks)
         }
     }
 
-    private fun logSnapshots(snapshots: List<ChunkSampleSnapshot>) {
-        val count = minOf(ChunkPerfRuntime.config.logTopChunks, snapshots.size)
-        ChunkPerfRuntime.logger.info(
-            "ChunkPerf snapshot: {} active chunks, showing top {}, droppedChunks={}, droppedBEHotspots={}",
-            snapshots.size, count,
-            TickSampleCollector.droppedNewChunkSamples,
-            TickSampleCollector.droppedNewBeHotspots
-        )
-        for (snapshot in snapshots.take(count)) {
-            val claim = when (val value = snapshot.claim) {
-                ClaimSnapshot.Unavailable -> "claim=unavailable"
-                ClaimSnapshot.Wilderness -> "claim=wilderness"
-                is ClaimSnapshot.Claimed -> "claim=${value.teamName}/${value.teamId} force=${value.forceLoadConfigured}/${value.actuallyForceLoaded}"
-            }
-            ChunkPerfRuntime.logger.info(String.format(
-                Locale.ROOT,
-                "  %s chunk [%d,%d] %.3f ms/tick | random=%.3fms be=%.3fms entity=%.3fms spawn=%.3fms | %s",
-                snapshot.dimension, snapshot.chunkX, snapshot.chunkZ, snapshot.totalMsPerTick,
-                snapshot.randomTickNs / 1_000_000.0, snapshot.blockEntityNs / 1_000_000.0,
-                snapshot.entityTickNs / 1_000_000.0, snapshot.mobSpawnNs / 1_000_000.0, claim
-            ))
-            for (hotspot in snapshot.blockEntityHotspots.take(3)) {
-                ChunkPerfRuntime.logger.info(String.format(
-                    Locale.ROOT,
-                    "      BE %s at %s: %.3fms",
-                    hotspot.blockEntityName ?: "unknown", hotspot.pos, hotspot.ns / 1_000_000.0
-                ))
-            }
-        }
-    }
 }
