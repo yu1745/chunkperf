@@ -7,13 +7,19 @@ import java.nio.file.Files
 
 data class ChunkPerfConfig(
     val enabled: Boolean = true,
-    val snapshotIntervalTicks: Int = 100,
+    val snapshotIntervalTicks: Int = 20,
     val blockEntityHotspotsEnabled: Boolean = false,
     val beHotspotTopN: Int = 20,
     val beHotspotMinRecordNs: Long = 1_000L,
     val maxBeHotspotEntriesPerChunk: Int = 2_000,
     val maxGlobalBeHotspotEntries: Int = 100_000,
     val maxPublishedBeHotspots: Int = 20_000,
+    val mobHotspotsEnabled: Boolean = false,
+    val mobHotspotTopN: Int = 20,
+    val mobHotspotMinRecordNs: Long = 1_000L,
+    val maxMobHotspotEntriesPerChunk: Int = 2_000,
+    val maxGlobalMobHotspotEntries: Int = 100_000,
+    val maxPublishedMobHotspots: Int = 20_000,
     val maxPublishedChunks: Int = 10_000,
     val pruneStaleAfterTicks: Long = 6_000L,
     val maxTrackedChunks: Int = 100_000,
@@ -27,6 +33,12 @@ data class ChunkPerfConfig(
             maxGlobalBeHotspotEntries in maxBeHotspotEntriesPerChunk..100_000 &&
             maxPublishedBeHotspots in beHotspotTopN..20_000 &&
             maxPublishedBeHotspots <= maxGlobalBeHotspotEntries &&
+            mobHotspotTopN in 0..100 &&
+            mobHotspotMinRecordNs >= 0L &&
+            maxMobHotspotEntriesPerChunk in mobHotspotTopN..2_000 &&
+            maxGlobalMobHotspotEntries in maxMobHotspotEntriesPerChunk..100_000 &&
+            maxPublishedMobHotspots in mobHotspotTopN..20_000 &&
+            maxPublishedMobHotspots <= maxGlobalMobHotspotEntries &&
             maxTrackedChunks in 1..100_000 &&
             maxPublishedChunks in 1..10_000 &&
             maxPublishedChunks <= maxTrackedChunks &&

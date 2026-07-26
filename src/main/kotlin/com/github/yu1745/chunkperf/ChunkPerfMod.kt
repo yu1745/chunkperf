@@ -25,16 +25,19 @@ object ChunkPerfRuntime {
     val latestSnapshot = AtomicReference<List<ChunkSampleSnapshot>>(emptyList())
     private val samplingEnabled = AtomicBoolean(false)
     private val blockEntityHotspotsEnabled = AtomicBoolean(false)
+    private val mobHotspotsEnabled = AtomicBoolean(false)
     var currentTick: Long = 0L
     var lastSnapshotTick: Long = 0L
     @Volatile var snapshotIntervalTicks: Int = 20
 
     val enabled: Boolean get() = samplingEnabled.get()
     val detailedBlockEntitySampling: Boolean get() = blockEntityHotspotsEnabled.get()
+    val detailedMobSampling: Boolean get() = mobHotspotsEnabled.get()
 
     fun setEnabled(enabled: Boolean) = samplingEnabled.set(enabled)
 
     fun setDetailedBlockEntitySampling(enabled: Boolean) = blockEntityHotspotsEnabled.set(enabled)
+    fun setDetailedMobSampling(enabled: Boolean) = mobHotspotsEnabled.set(enabled)
 
     inline fun safeRecord(block: () -> Unit) {
         if (!enabled) return
@@ -91,6 +94,7 @@ class ChunkPerfMod : ModInitializer {
         ChunkPerfRuntime.lastSnapshotTick = 0L
         ChunkPerfRuntime.snapshotIntervalTicks = ChunkPerfRuntime.config.snapshotIntervalTicks
         ChunkPerfRuntime.setDetailedBlockEntitySampling(ChunkPerfRuntime.config.blockEntityHotspotsEnabled)
+        ChunkPerfRuntime.setDetailedMobSampling(ChunkPerfRuntime.config.mobHotspotsEnabled)
         ChunkPerfRuntime.setEnabled(ChunkPerfRuntime.config.enabled)
         ChunkPerfRuntime.logger.info("ChunkPerf sampling {}", if (ChunkPerfRuntime.enabled) "started" else "disabled by config")
     }
@@ -98,6 +102,7 @@ class ChunkPerfMod : ModInitializer {
     private fun onServerStopped(server: MinecraftServer) {
         ChunkPerfRuntime.setEnabled(false)
         ChunkPerfRuntime.setDetailedBlockEntitySampling(false)
+        ChunkPerfRuntime.setDetailedMobSampling(false)
         TickSampleCollector.clear()
         ChunkPerfRuntime.latestSnapshot.set(emptyList())
         ClaimRegistry.reset()
@@ -137,7 +142,8 @@ class ChunkPerfMod : ModInitializer {
                     blockEntityTickCount = sample.blockEntityTickCount,
                     entityTickCount = sample.entityTickCount,
                     intervalTicks = sample.intervalTicks,
-                    blockEntityHotspots = sample.hotspots
+                    blockEntityHotspots = sample.hotspots,
+                    mobHotspots = sample.mobHotspots
                 )
             }
             val snapshots = Collections.unmodifiableList(builder)

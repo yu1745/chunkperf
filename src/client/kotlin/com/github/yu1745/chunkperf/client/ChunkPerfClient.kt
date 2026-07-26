@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicReference
 object ChunkPerfClientState {
     val samples = AtomicReference<List<ClientChunkSample>>(emptyList())
     @Volatile var pendingTarget: PendingTarget? = null
-    @Volatile var selectedIntervalTicks: Int = 100
+    @Volatile var selectedIntervalTicks: Int = 20
     @Volatile var selectedClusterRadiusChunks: Int = 2
     @Volatile var selectedServerClusterRadiusChunks: Int = 2
     @Volatile var showOnlyOwnedChunks: Boolean = false
@@ -56,10 +56,15 @@ class ChunkPerfClient : ClientModInitializer {
                     val ns = buf.readLong()
                     hotspots += ClientBlockEntitySample(pos, name, blockId, ns)
                 }
+                val mobCount = buf.readVarInt()
+                val mobs = ArrayList<ClientMobSample>(mobCount)
+                repeat(mobCount) {
+                    mobs += ClientMobSample(buf.readBlockPos(), buf.readString(), buf.readIdentifier(), buf.readLong())
+                }
                 values += ClientChunkSample(
                     dimension, chunkX, chunkZ, ownedByViewer, ownerTeamId, ownerTeamName, randomTickNs, blockEntityNs,
                     entityTickNs, mobSpawnNs, blockEntityTickCount, entityTickCount,
-                    intervalTicks, java.util.List.copyOf(hotspots)
+                    intervalTicks, java.util.List.copyOf(hotspots), java.util.List.copyOf(mobs)
                 )
             }
             client.execute {

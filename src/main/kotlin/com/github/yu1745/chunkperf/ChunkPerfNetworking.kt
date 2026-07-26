@@ -21,6 +21,9 @@ object ChunkPerfNetworking {
     val UNSUBSCRIBE = Identifier("chunkperf", "unsubscribe")
     val BE_SUBSCRIBE = Identifier("chunkperf", "be_subscribe")
     val BE_UNSUBSCRIBE = Identifier("chunkperf", "be_unsubscribe")
+    val OPEN_MOB_SCREEN = Identifier("chunkperf", "open_mob_screen")
+    val MOB_SUBSCRIBE = Identifier("chunkperf", "mob_subscribe")
+    val MOB_UNSUBSCRIBE = Identifier("chunkperf", "mob_unsubscribe")
     val TELEPORT = Identifier("chunkperf", "teleport")
     val SET_INTERVAL = Identifier("chunkperf", "set_interval")
 
@@ -31,21 +34,22 @@ object ChunkPerfNetworking {
     fun sendOpenBe(player: ServerPlayerEntity) {
         ServerPlayNetworking.send(player, OPEN_BE_SCREEN, PacketByteBufs.empty())
     }
+    fun sendOpenMob(player: ServerPlayerEntity) = ServerPlayNetworking.send(player, OPEN_MOB_SCREEN, PacketByteBufs.empty())
 
     fun sendOpenServer(player: ServerPlayerEntity) {
         ServerPlayNetworking.send(player, OPEN_SERVER_SCREEN, PacketByteBufs.empty())
     }
 
-    fun sendSnapshot(player: ServerPlayerEntity, snapshots: List<ChunkSampleSnapshot>, includeBlockEntities: Boolean = false) {
+    fun sendSnapshot(player: ServerPlayerEntity, snapshots: List<ChunkSampleSnapshot>, includeBlockEntities: Boolean = false, includeMobs: Boolean = false) {
         val buf = PacketByteBufs.create()
         buf.writeBoolean(ChunkPerfRuntime.detailedBlockEntitySampling)
         val viewerTeamId = ClaimRegistry.safeGetTeamId(player)
         buf.writeVarInt(snapshots.size)
-        for (snapshot in snapshots) writeSnapshot(buf, snapshot, includeBlockEntities, player, viewerTeamId)
+        for (snapshot in snapshots) writeSnapshot(buf, snapshot, includeBlockEntities, includeMobs, player, viewerTeamId)
         ServerPlayNetworking.send(player, SNAPSHOT, buf)
     }
 
-    private fun writeSnapshot(buf: PacketByteBuf, value: ChunkSampleSnapshot, includeBlockEntities: Boolean, player: ServerPlayerEntity, viewerTeamId: java.util.UUID?) {
+    private fun writeSnapshot(buf: PacketByteBuf, value: ChunkSampleSnapshot, includeBlockEntities: Boolean, includeMobs: Boolean, player: ServerPlayerEntity, viewerTeamId: java.util.UUID?) {
         buf.writeIdentifier(value.dimension)
         buf.writeInt(value.chunkX)
         buf.writeInt(value.chunkZ)
@@ -74,6 +78,14 @@ object ChunkPerfNetworking {
                 ?: Identifier("minecraft", "air")
             buf.writeIdentifier(blockId)
             buf.writeLong(hotspot.ns)
+        }
+        val mobs = if (includeMobs) value.mobHotspots else emptyList()
+        buf.writeVarInt(mobs.size)
+        for (mob in mobs) {
+            buf.writeBlockPos(mob.pos)
+            buf.writeString(mob.mobName)
+            buf.writeIdentifier(mob.entityId)
+            buf.writeLong(mob.ns)
         }
     }
 }

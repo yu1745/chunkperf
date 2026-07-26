@@ -18,7 +18,8 @@ internal data class RawChunkSnapshot(
     val blockEntityTickCount: Long,
     val entityTickCount: Long,
     val intervalTicks: Int,
-    val hotspots: List<BlockPosSample>
+    val hotspots: List<BlockPosSample>,
+    val mobHotspots: List<MobSample>
 ) {
     val totalNs: Long get() = saturatedSum(randomTickNs, blockEntityNs, entityTickNs, mobSpawnNs)
     val chunkX: Int get() = ChunkPos.getPackedX(key.chunkPos)
@@ -28,9 +29,12 @@ internal data class RawChunkSnapshot(
 object TickSampleCollector {
     private val stats = HashMap<ChunkDimKey, ChunkTickStats>()
     private var globalBeHotspotEntryCount = 0
+    private var globalMobHotspotEntryCount = 0
     var droppedNewChunkSamples: Long = 0L
         private set
     var droppedNewBeHotspots: Long = 0L
+        private set
+    var droppedNewMobHotspots: Long = 0L
         private set
 
     fun record(
@@ -87,13 +91,31 @@ object TickSampleCollector {
         globalBeHotspotEntryCount++
     }
 
+    fun recordMob(dimension: RegistryKey<World>, pos: BlockPos, ns: Long, mobName: String, entityId: net.minecraft.util.Identifier, tick: Long) {
+        val chunkPos = ChunkPos.toLong(pos.x shr 4, pos.z shr 4)
+        record(dimension, chunkPos, SampleSource.ENTITY_TICK, ns, tick)
+        val config = ChunkPerfRuntime.config
+        if (ns < config.mobHotspotMinRecordNs || config.mobHotspotTopN == 0 || config.maxPublishedMobHotspots == 0) return
+        val chunkStats = stats[ChunkDimKey(dimension, chunkPos)] ?: return
+        var hotspots = chunkStats.mobHotspots
+        val immutablePos = pos.toImmutable()
+        val existing = hotspots?.get(immutablePos)
+        if (existing != null) { existing.ns = saturatedAdd(existing.ns, ns); return }
+        if ((hotspots?.size ?: 0) >= config.maxMobHotspotEntriesPerChunk || globalMobHotspotEntryCount >= config.maxGlobalMobHotspotEntries) {
+            droppedNewMobHotspots = saturatedAdd(droppedNewMobHotspots, 1L); return
+        }
+        if (hotspots == null) { hotspots = HashMap(); chunkStats.mobHotspots = hotspots }
+        hotspots[immutablePos] = MutableMobSample(ns, mobName, entityId)
+        globalMobHotspotEntryCount++
+    }
+
     internal fun drainTop(intervalTicks: Int, maxPublishedChunks: Int): List<RawChunkSnapshot> {
         val chunkHeap = PriorityQueue<RawChunkSnapshot>(compareBy { it.totalNs })
         for ((key, value) in stats) {
             val raw = RawChunkSnapshot(
                 key, value.randomTickNs, value.blockEntityNs, value.entityTickNs,
                 value.mobSpawnNs, value.blockEntityTickCount, value.entityTickCount,
-                intervalTicks, emptyList()
+                intervalTicks, emptyList(), emptyList()
             )
             value.randomTickNs = 0L
             value.blockEntityNs = 0L
@@ -138,6 +160,18 @@ object TickSampleCollector {
         }
         check(globalBeHotspotEntryCount == 0) { "ChunkPerf hotspot count became inconsistent" }
 
+        val mobGrouped = mutableMapOf<ChunkDimKey, List<MobSample>>()
+        for ((key, value) in stats) {
+            val hotspots = value.mobHotspots ?: continue
+            value.mobHotspots = null
+            globalMobHotspotEntryCount -= hotspots.size
+            if (key in selected && config.mobHotspotTopN > 0) {
+                mobGrouped[key] = hotspots.entries.sortedByDescending { it.value.ns }.take(config.mobHotspotTopN)
+                    .map { MobSample(it.key.toImmutable(), it.value.ns, it.value.mobName, it.value.entityId) }
+            }
+        }
+        check(globalMobHotspotEntryCount == 0) { "ChunkPerf mob hotspot count became inconsistent" }
+
         val grouped = globalHeap.groupBy { it.key }
         return selected.values
             .map { raw ->
@@ -145,7 +179,7 @@ object TickSampleCollector {
                     ?.sortedByDescending { it.sample.ns }
                     ?.map { BlockPosSample(it.pos.toImmutable(), it.sample.ns, it.sample.blockEntityName) }
                     ?: emptyList()
-                raw.copy(hotspots = java.util.List.copyOf(published))
+                raw.copy(hotspots = java.util.List.copyOf(published), mobHotspots = java.util.List.copyOf(mobGrouped[raw.key] ?: emptyList()))
             }
             .sortedByDescending { it.totalNs }
     }
@@ -156,6 +190,7 @@ object TickSampleCollector {
             val value = iterator.next().value
             if (currentTick - value.lastWriteTick <= maxAgeTicks) continue
             globalBeHotspotEntryCount -= value.blockEntityHotspots?.size ?: 0
+            globalMobHotspotEntryCount -= value.mobHotspots?.size ?: 0
             iterator.remove()
         }
         check(globalBeHotspotEntryCount >= 0)
@@ -166,11 +201,18 @@ object TickSampleCollector {
         globalBeHotspotEntryCount = 0
     }
 
+    fun clearMobHotspots() {
+        for (value in stats.values) value.mobHotspots = null
+        globalMobHotspotEntryCount = 0
+    }
+
     fun clear() {
         stats.clear()
         globalBeHotspotEntryCount = 0
+        globalMobHotspotEntryCount = 0
         droppedNewChunkSamples = 0L
         droppedNewBeHotspots = 0L
+        droppedNewMobHotspots = 0L
     }
 
     private data class HotspotCandidate(

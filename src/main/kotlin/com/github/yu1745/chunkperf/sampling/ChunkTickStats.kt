@@ -11,6 +11,7 @@ internal class ChunkTickStats(firstSeenTick: Long) {
     var entityTickCount = 0L
     var lastWriteTick = firstSeenTick
     var blockEntityHotspots: HashMap<BlockPos, MutableBlockEntitySample>? = null
+    var mobHotspots: HashMap<BlockPos, MutableMobSample>? = null
 
     fun add(source: SampleSource, ns: Long, tick: Long) {
         when (source) {
@@ -32,4 +33,10 @@ internal class ChunkTickStats(firstSeenTick: Long) {
 internal data class MutableBlockEntitySample(
     var ns: Long,
     var blockEntityName: String?
+)
+
+internal data class MutableMobSample(
+    var ns: Long,
+    var mobName: String,
+    var entityId: net.minecraft.util.Identifier
 )

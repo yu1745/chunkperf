@@ -21,6 +21,8 @@ data class BlockPosSample(
     val blockEntityName: String?
 )
 
+data class MobSample(val pos: BlockPos, val ns: Long, val mobName: String, val entityId: Identifier)
+
 data class ChunkSampleSnapshot(
     val dimension: Identifier,
     val chunkX: Int,
@@ -33,7 +35,8 @@ data class ChunkSampleSnapshot(
     val blockEntityTickCount: Long,
     val entityTickCount: Long,
     val intervalTicks: Int,
-    val blockEntityHotspots: List<BlockPosSample>
+    val blockEntityHotspots: List<BlockPosSample>,
+    val mobHotspots: List<MobSample> = emptyList()
 ) {
     val totalNs: Long
         get() = saturatedSum(randomTickNs, blockEntityNs, entityTickNs, mobSpawnNs)

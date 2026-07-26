@@ -18,12 +18,18 @@ import java.util.concurrent.ConcurrentHashMap
 object ChunkPerfServerUi {
     private val chunkViewers = ConcurrentHashMap.newKeySet<UUID>()
     private val blockEntityViewers = ConcurrentHashMap.newKeySet<UUID>()
+    private val mobViewers = ConcurrentHashMap.newKeySet<UUID>()
 
     fun register() {
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             dispatcher.register(
+                net.minecraft.server.command.CommandManager.literal("perfmob")
+                    .requires { it.entity is ServerPlayerEntity }
+                    .executes { context -> ChunkPerfNetworking.sendOpenMob(context.source.player!!); Command.SINGLE_SUCCESS }
+            )
+            dispatcher.register(
                 net.minecraft.server.command.CommandManager.literal("perfchunk")
-                    .requires { it.entity is ServerPlayerEntity && it.hasPermissionLevel(2) }
+                    .requires { it.entity is ServerPlayerEntity }
                     .executes { context ->
                         val player = context.source.player!!
                         ChunkPerfNetworking.sendOpen(player)
@@ -32,7 +38,7 @@ object ChunkPerfServerUi {
             )
             dispatcher.register(
                 net.minecraft.server.command.CommandManager.literal("perfbe")
-                    .requires { it.entity is ServerPlayerEntity && it.hasPermissionLevel(2) }
+                    .requires { it.entity is ServerPlayerEntity }
                     .executes { context ->
                         val player = context.source.player!!
                         ChunkPerfNetworking.sendOpenBe(player)
@@ -41,7 +47,7 @@ object ChunkPerfServerUi {
             )
             dispatcher.register(
                 net.minecraft.server.command.CommandManager.literal("perfserver")
-                    .requires { it.entity is ServerPlayerEntity && it.hasPermissionLevel(2) }
+                    .requires { it.entity is ServerPlayerEntity }
                     .executes { context ->
                         val player = context.source.player!!
                         ChunkPerfNetworking.sendOpenServer(player)
@@ -60,10 +66,9 @@ object ChunkPerfServerUi {
         }
         ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.BE_SUBSCRIBE) { server, player, _, _, _ ->
             server.execute {
-                if (!player.hasPermissionLevel(2)) return@execute
                 blockEntityViewers += player.uuid
                 ChunkPerfRuntime.setDetailedBlockEntitySampling(true)
-                ChunkPerfNetworking.sendSnapshot(player, ChunkPerfRuntime.latestSnapshot.get(), true)
+                ChunkPerfNetworking.sendSnapshot(player, ChunkPerfRuntime.latestSnapshot.get(), true, true)
             }
         }
         ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.BE_UNSUBSCRIBE) { server, player, _, _, _ ->
@@ -72,6 +77,8 @@ object ChunkPerfServerUi {
                 disableBlockEntitySamplingWhenUnused()
             }
         }
+        ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.MOB_SUBSCRIBE) { server, player, _, _, _ -> server.execute { mobViewers += player.uuid; ChunkPerfRuntime.setDetailedMobSampling(true); ChunkPerfNetworking.sendSnapshot(player, ChunkPerfRuntime.latestSnapshot.get(), true, true) } }
+        ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.MOB_UNSUBSCRIBE) { server, player, _, _, _ -> server.execute { mobViewers -= player.uuid; disableMobSamplingWhenUnused() } }
         ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.TELEPORT) { server, player, _, buf, _ ->
             val dimensionId = buf.readIdentifier()
             val chunkX = buf.readInt()
@@ -81,21 +88,21 @@ object ChunkPerfServerUi {
         ServerPlayNetworking.registerGlobalReceiver(ChunkPerfNetworking.SET_INTERVAL) { server, player, _, buf, _ ->
             val ticks = buf.readVarInt()
             server.execute {
-                if (player.hasPermissionLevel(2)) {
-                    ChunkPerfRuntime.snapshotIntervalTicks = ticks.coerceIn(20, 200)
-                    ChunkPerfRuntime.logger.info("{} changed snapshot interval to {} ticks", player.entityName, ChunkPerfRuntime.snapshotIntervalTicks)
-                }
+                ChunkPerfRuntime.snapshotIntervalTicks = ticks.coerceIn(20, 200)
+                ChunkPerfRuntime.logger.info("{} changed snapshot interval to {} ticks", player.entityName, ChunkPerfRuntime.snapshotIntervalTicks)
             }
         }
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->
             chunkViewers -= handler.player.uuid
             blockEntityViewers -= handler.player.uuid
+            mobViewers -= handler.player.uuid
             disableBlockEntitySamplingWhenUnused()
+            disableMobSamplingWhenUnused()
         }
     }
 
     fun publish(server: MinecraftServer) {
-        if (chunkViewers.isEmpty() && blockEntityViewers.isEmpty()) return
+        if (chunkViewers.isEmpty() && blockEntityViewers.isEmpty() && mobViewers.isEmpty()) return
         val snapshots = ChunkPerfRuntime.latestSnapshot.get()
         for (uuid in chunkViewers.toList()) {
             val player = server.playerManager.getPlayer(uuid)
@@ -103,9 +110,20 @@ object ChunkPerfServerUi {
         }
         for (uuid in blockEntityViewers.toList()) {
             val player = server.playerManager.getPlayer(uuid)
-            if (player == null) blockEntityViewers -= uuid else ChunkPerfNetworking.sendSnapshot(player, snapshots, true)
+            if (player == null) blockEntityViewers -= uuid else ChunkPerfNetworking.sendSnapshot(player, snapshots, true, true)
+        }
+        for (uuid in mobViewers.toList()) {
+            val player = server.playerManager.getPlayer(uuid)
+            if (player == null) mobViewers -= uuid else ChunkPerfNetworking.sendSnapshot(player, snapshots, true, true)
         }
         disableBlockEntitySamplingWhenUnused()
+        disableMobSamplingWhenUnused()
+    }
+
+    private fun disableMobSamplingWhenUnused() {
+        if (mobViewers.isNotEmpty()) return
+        ChunkPerfRuntime.setDetailedMobSampling(false)
+        TickSampleCollector.clearMobHotspots()
     }
 
     private fun disableBlockEntitySamplingWhenUnused() {
@@ -115,7 +133,6 @@ object ChunkPerfServerUi {
     }
 
     private fun teleport(player: ServerPlayerEntity, dimensionId: Identifier, chunkX: Int, chunkZ: Int) {
-        if (!player.hasPermissionLevel(2)) return
         val key = RegistryKey.of(RegistryKeys.WORLD, dimensionId)
         val world: ServerWorld = player.server.getWorld(key) ?: return
         val x = chunkX * 16 + 8

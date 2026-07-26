@@ -5,6 +5,8 @@ import com.github.yu1745.chunkperf.sampling.SampleSource
 import com.github.yu1745.chunkperf.sampling.TickSampleCollector
 import com.llamalad7.mixinextras.sugar.Local
 import net.minecraft.entity.Entity
+import net.minecraft.entity.mob.MobEntity
+import net.minecraft.registry.Registries
 import net.minecraft.server.world.ServerWorld
 import org.spongepowered.asm.mixin.Mixin
 import org.spongepowered.asm.mixin.Unique
@@ -49,6 +51,10 @@ abstract class EntityTickMixin {
                 elapsed,
                 ChunkPerfRuntime.currentTick
             )
+            if (ChunkPerfRuntime.detailedMobSampling && entity is MobEntity) {
+                val typeId = Registries.ENTITY_TYPE.getId(entity.type)
+                TickSampleCollector.recordMob(world.registryKey, entity.blockPos, elapsed, typeId.toString(), typeId, ChunkPerfRuntime.currentTick)
+            }
         }
     }
 }
